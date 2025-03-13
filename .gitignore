@@ -1,0 +1,6 @@
+# Python bytecode cache directories
+__pycache__/
+*.py[cod]
+.env
+*.pyc
+.DS_Store
