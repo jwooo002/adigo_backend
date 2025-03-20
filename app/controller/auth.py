@@ -20,17 +20,49 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
     """
     로그인 엔드포인트:
     - 클라이언트는 username과 password를 전송
-    - 인증 성공 시 JWT 토큰을 반환
+    - 인증 성공 시 JWT access 토큰과 refresh 토큰 반환
     """
 
-    #유저 객체 받기
-    user = authenticate_user(db,form_data.username, form_data.password)
+    # 유저 인증
+    user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(status_code=400, detail="Incorrect username or password")
-    
-    #토큰 받기 및 토큰 반환
+
+    # 액세스 토큰 및 리프레시 토큰 생성
     access_token = create_access_token(data={"sub": user.username})
-    return {"access_token": access_token, "token_type": "bearer"}
+    refresh_token = create_refresh_token(data={"sub": user.username})
+
+    # 액세스 토큰 및 리프레시 토큰 반환
+    return {
+        "token_type": "bearer",
+        "access_token": access_token,
+        "refresh_token": refresh_token
+    }
+
+
+
+@router.post("/refreshtoken", response_model=dict)
+async def refresh_access_token(refresh_token: str, db: Session = Depends(get_db)):
+    """
+    만료된 액세스 토큰과 유효한 리프레시 토큰을 받아서 새 액세스 토큰 발급
+    """
+    try:
+        payload = jwt.decode(refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
+        username = payload.get("sub")
+
+        user = get_user_by_username(db, username)
+        if user is None:
+            raise HTTPException(status_code=401, detail="User not found")
+
+        new_access_token = create_access_token(data={"sub": username})
+
+        return {"access_token": new_access_token, "token_type": "bearer"}
+
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Refresh token expired")
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
 
 
 
